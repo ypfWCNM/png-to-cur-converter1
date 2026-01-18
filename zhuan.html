@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PNG to CUR Converter</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f4f4f9;
+            margin: 0;
+        }
+        .container {
+            text-align: center;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        input[type="file"] {
+            margin-bottom: 20px;
+        }
+        label {
+            margin-right: 10px;
+        }
+        input[type="number"] {
+            width: 50px;
+            margin-right: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        img {
+            max-width: 100%;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Upload PNG and Convert to CUR</h1>
+        <input type="file" id="imageInput" accept="image/png">
+        <label for="hotspotX">Hotspot X:</label>
+        <input type="number" id="hotspotX" value="0" min="0">
+        <label for="hotspotY">Hotspot Y:</label>
+        <input type="number" id="hotspotY" value="0" min="0">
+        <button onclick="convertToCur()">Convert to CUR</button>
+        <img id="convertedImage" alt="Converted Image">
+    </div>
+
+    <script>
+        // Function to convert PNG to CUR
+        function pngToCursor(pngData, hotspotX, hotspotY) {
+            const headerSize = 6; // Size of the ICO/CUR header
+            const iconDirEntrySize = 16; // Size of each ICONDIRENTRY structure
+
+            const width = pngData.width;
+            const height = pngData.height;
+
+            const fileSize = headerSize + iconDirEntrySize + (width * height * 4); // Assuming 32-bit ARGB
+
+            const buffer = new ArrayBuffer(fileSize);
+            const view = new DataView(buffer);
+
+            // Write CUR header
+            view.setUint16(0, 0, true); // Reserved
+            view.setUint16(2, 2, true); // Type (2 for CUR)
+            view.setUint16(4, 1, true); // Number of images
+
+            // Write Icon Directory Entry
+            let offset = headerSize + iconDirEntrySize;
+            view.setUint8(6, width === 256 ? 0 : width); // Width
+            view.setUint8(7, height === 256 ? 0 : height); // Height
+            view.setUint8(8, 0); // Color count (0 means 256 colors or more)
+            view.setUint8(9, 0); // Reserved
+            view.setUint16(10, hotspotX, true); // Hotspot X coordinate
+            view.setUint16(12, hotspotY, true); // Hotspot Y coordinate
+            view.setUint32(14, fileSize - headerSize - iconDirEntrySize, true); // Bytes in image data
+            view.setUint32(18, offset, true); // Offset to image data
+
+            // Copy pixel data from PNG to CUR
+            const imageData = pngData.data;
+            const curImageData = new Uint8Array(buffer, offset, fileSize - offset);
+
+            for (let i = 0; i < imageData.length; i += 4) {
+                curImageData[i] = imageData[i + 2]; // Blue
+                curImageData[i + 1] = imageData[i + 1]; // Green
+                curImageData[i + 2] = imageData[i]; // Red
+                curImageData[i + 3] = imageData[i + 3]; // Alpha
+            }
+
+            return new Blob([buffer], { type: 'application/octet-stream' });
+        }
+
+        function convertToCur() {
+            const fileInput = document.getElementById('imageInput');
+            const file = fileInput.files[0];
+            if (!file || file.type !== 'image/png') return;
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.src = event.target.result;
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+
+                    const pngData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const hotspotX = parseInt(document.getElementById('hotspotX').value, 10);
+                    const hotspotY = parseInt(document.getElementById('hotspotY').value, 10);
+                    const curBlob = pngToCursor(pngData, hotspotX, hotspotY);
+
+                    const convertedImage = document.getElementById('convertedImage');
+                    convertedImage.src = URL.createObjectURL(curBlob);
+
+                    // Download the converted CUR file
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(curBlob);
+                    link.download = 'converted.cur';
+                    link.click();
+                };
+            };
+            reader.readAsDataURL(file);
+        }
+    </script>
+</body>
+</html>
+
+
